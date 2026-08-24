@@ -3,6 +3,7 @@ from collections import defaultdict
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from shield.database import log_block
 
 request_log = defaultdict(list)
 blocked_until = {}
@@ -12,7 +13,6 @@ class ShieldMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         ip = request.client.host
         path = request.url.path
-        # NEW: track per (IP + path) combo, not just IP alone
         key = f"{ip}:{path}"
         now = time.time()
 
@@ -38,11 +38,16 @@ class ShieldMiddleware(BaseHTTPMiddleware):
 
             if variance < 0.01:
                 blocked_until[key] = now + COOLDOWN_SECONDS
+                reason = f"Detected {len(recent)} requests to {path} in 10s with suspiciously even timing (variance={variance:.4f}) — flagged as automated traffic"
+
+                # NEW: save this block event to the database
+                log_block(ip, path, reason)
+
                 return JSONResponse(
                     status_code=429,
                     content={
                         "blocked": True,
-                        "reason": f"Detected {len(recent)} requests to {path} in 10s with suspiciously even timing (variance={variance:.4f}) — flagged as automated traffic",
+                        "reason": reason,
                         "ip": ip
                     }
                 )
