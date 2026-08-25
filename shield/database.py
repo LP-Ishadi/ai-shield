@@ -45,3 +45,65 @@ def get_all_blocks():
     cur.close()
     conn.close()
     return rows
+
+def get_blocks_grouped(period="hour"):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT date_trunc(%s, timestamp) AS period, COUNT(*) 
+        FROM blocked_events 
+        GROUP BY period 
+        ORDER BY period
+    """, (period,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+def get_threat_levels(ip_filter=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    if ip_filter:
+        cur.execute("""
+            SELECT ip, COUNT(*) as block_count
+            FROM blocked_events
+            WHERE ip LIKE %s
+            GROUP BY ip
+            ORDER BY block_count DESC
+        """, (f"%{ip_filter}%",))
+    else:
+        cur.execute("""
+            SELECT ip, COUNT(*) as block_count
+            FROM blocked_events
+            GROUP BY ip
+            ORDER BY block_count DESC
+        """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    threats = []
+    for ip, count in rows:
+        if count >= 4:
+            level = "High"
+        elif count >= 2:
+            level = "Medium"
+        else:
+            level = "Low"
+        threats.append((ip, count, level))
+    return threats
+
+def search_blocks(ip_filter=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    if ip_filter:
+        cur.execute(
+            "SELECT id, ip, path, reason, timestamp FROM blocked_events WHERE ip LIKE %s ORDER BY timestamp DESC",
+            (f"%{ip_filter}%",)
+        )
+    else:
+        cur.execute("SELECT id, ip, path, reason, timestamp FROM blocked_events ORDER BY timestamp DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
