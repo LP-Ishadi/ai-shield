@@ -5,6 +5,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from shield.database import log_block
 
+SUSPICIOUS_USER_AGENTS = ["python-requests", "curl", "wget", "scrapy", "bot", ""]
+
 request_log = defaultdict(list)
 blocked_until = {}
 COOLDOWN_SECONDS = 30
@@ -13,6 +15,8 @@ class ShieldMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         ip = request.client.host
         path = request.url.path
+        user_agent = request.headers.get("user-agent", "").lower()
+        is_suspicious_ua = any(bad in user_agent for bad in SUSPICIOUS_USER_AGENTS) or user_agent == ""
         key = f"{ip}:{path}"
         now = time.time()
 
@@ -36,9 +40,10 @@ class ShieldMiddleware(BaseHTTPMiddleware):
             avg_gap = sum(gaps) / len(gaps)
             variance = sum((g - avg_gap) ** 2 for g in gaps) / len(gaps)
 
-            if variance < 0.01:
+            if variance < 0.01 or is_suspicious_ua:
                 blocked_until[key] = now + COOLDOWN_SECONDS
-                reason = f"Detected {len(recent)} requests to {path} in 10s with suspiciously even timing (variance={variance:.4f}) — flagged as automated traffic"
+                ua_note = f", suspicious User-Agent ('{user_agent}')" if is_suspicious_ua else ""
+                reason = f"Detected {len(recent)} requests to {path} in 10s with suspiciously even timing (variance={variance:.4f}){ua_note} — flagged as automated traffic"
 
                 # NEW: save this block event to the database
                 log_block(ip, path, reason)
