@@ -36,3 +36,12 @@ def log_block(ip: str, path: str, reason: str):
     conn.commit()
     cur.close()
     conn.close()
+
+def get_all_blocks():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, ip, path, reason, timestamp FROM blocked_events ORDER BY timestamp DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
