@@ -25,6 +25,9 @@ AI-generation APIs (image generation, map generation, text generation, etc.) are
   - Auto-refreshing (with smart pausing while actively searching)
 - **Reverse-proxy architecture** — deployable in front of any existing application without modifying its code, tested against both a custom endpoint and [OWASP Juice Shop](https://owasp.org/www-project-juice-shop/)
 
+- **Configurable detection thresholds** — cooldown period, variance sensitivity, request window, and minimum request count are all adjustable via environment variables (`SHIELD_COOLDOWN_SECONDS`, `SHIELD_VARIANCE_THRESHOLD`, etc.), with sensible defaults built in
+- **Automated test suite** (`pytest`) — unit tests verify the core detection logic (timing variance calculation and User-Agent matching) independently of the full server, catching regressions before they reach production
+
 ## Screenshots
 
 **Dashboard overview — live chart, time-range filters, export**
@@ -67,6 +70,12 @@ The shield is implemented as [Starlette/FastAPI middleware](shield/middleware.py
 4. Legitimate traffic (irregular timing, real browser User-Agent) passes through untouched.
 
 ## Running Locally
+### Customizing detection thresholds 
+
+```bash
+export SHIELD_COOLDOWN_SECONDS=60
+export SHIELD_VARIANCE_THRESHOLD=0.02
+```
 
 ### Prerequisites
 - Python 3.11+
@@ -119,8 +128,6 @@ python3 attack_simulation_juiceshop.py   # targets Juice Shop via the proxy
 ## Future Improvements
 
 - Move rate-tracking state to Redis for persistence and multi-instance support
-- Configurable detection thresholds via `.env` or config file
-- Automated test suite (`pytest`)
 - Package as an installable Python library (`pip install ai-shield`)
 - WebSocket support in the reverse proxy
 - IP reputation lookups and more advanced behavioral fingerprinting
