@@ -4,8 +4,14 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from shield.database import log_block
+from shield.config import (
+    COOLDOWN_SECONDS,
+    VARIANCE_THRESHOLD,
+    REQUEST_WINDOW_SECONDS,
+    MIN_REQUESTS_TO_CHECK,
+    SUSPICIOUS_USER_AGENTS,
+)
 
-SUSPICIOUS_USER_AGENTS = ["python-requests", "curl", "wget", "scrapy", "bot",]
 
 def calculate_variance(timestamps):
     """Given a list of timestamps, calculate the variance of gaps between them."""
@@ -24,7 +30,7 @@ def is_suspicious_user_agent(user_agent: str) -> bool:
 
 request_log = defaultdict(list)
 blocked_until = {}
-COOLDOWN_SECONDS = 30
+
 
 class ShieldMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -47,13 +53,13 @@ class ShieldMiddleware(BaseHTTPMiddleware):
             )
 
         request_log[key].append(now)
-        request_log[key] = [t for t in request_log[key] if now - t < 10]
+        request_log[key] = [t for t in request_log[key] if now - t < REQUEST_WINDOW_SECONDS]
         recent = request_log[key]
 
-        if len(recent) >= 5:
+        if len(recent) >= MIN_REQUESTS_TO_CHECK:
             variance = calculate_variance(recent)
 
-            if variance < 0.01 or is_suspicious_ua:
+            if variance < VARIANCE_THRESHOLD or is_suspicious_ua:
                 blocked_until[key] = now + COOLDOWN_SECONDS
                 ua_note = f", suspicious User-Agent ('{user_agent}')" if is_suspicious_ua else ""
                 reason = f"Detected {len(recent)} requests to {path} in 10s with suspiciously even timing (variance={variance:.4f}){ua_note} — flagged as automated traffic"
